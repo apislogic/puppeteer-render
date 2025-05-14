@@ -4,7 +4,10 @@ const app = express();
 
 const PORT = process.env.PORT || 4000;
 
-app.get("/scrape", (req, res) => {
+// 🔧 THIS LINE IS CRITICAL
+app.use(express.json());
+
+app.post("/scrape", (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).send("Missing 'url' in body.");
   scrapeLogic(res, url);
