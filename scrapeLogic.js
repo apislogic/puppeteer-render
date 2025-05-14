@@ -19,44 +19,111 @@ const scrapeLogic = async (res, url) => {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle2" });
 
-    // Attempt to detect which solar-only section exists
-    const solarSelector =
-      (await page.$("#collapse-section-v-0-31")) ||
-      (await page.$("#collapse-section-v-0-21"));
+    const data = await page.evaluate(() => {
+      const greetingEl = document.querySelector('h2.text-blue-900');
+      const distanceEl = document.querySelector('span.eyebrow.text-blue-800');
 
-    const data = await page.evaluate((solarSelectorId) => {
-      const getTextFromTable = (sectionSelector, labelMatch, col = 0) => {
-        const section = document.querySelector(sectionSelector);
-        if (!section) return null;
-
-        const rows = section.querySelectorAll("table tbody tr");
-        for (const row of rows) {
-          const th = row.querySelector("th");
-          const tds = row.querySelectorAll("td");
-          if (!th || tds.length === 0) continue;
-
-          const label = th.innerText.trim().toLowerCase();
-          if (label.includes(labelMatch.toLowerCase())) {
-            return tds[col]?.innerText.trim();
-          }
+      // Get system size
+      const rows = Array.from(document.querySelectorAll('.system-info table tbody tr'));
+      let systemSize = '';
+      for (const row of rows) {
+        const label = row.querySelector('th')?.innerText?.trim();
+        if (label?.toLowerCase() === 'system size') {
+          systemSize = row.querySelector('td')?.innerText?.trim() || '';
+          break;
         }
-        return null;
-      };
+      }
 
-      const solarSection = document.querySelector("#collapse-section-v-0-31") ||
-                           document.querySelector("#collapse-section-v-0-21");
-      const batterySection = document.querySelector("#collapse-section-v-0-54");
+      // Solar-only section data
+      const solarSection =
+        document.querySelector('#collapse-section-v-0-31') ||
+        document.querySelector('#collapse-section-v-0-21');
+      let solar_25yr_savings = '';
+      let solar_gross_price = '';
+      let solar_federal_itc = '';
+      let solar_initial_monthly = '';
+
+      if (solarSection) {
+        const tables = solarSection.querySelectorAll('table');
+
+        tables.forEach((table) => {
+          const rows = table.querySelectorAll('tbody tr');
+
+          rows.forEach((row) => {
+            const label = row.querySelector('th')?.innerText.trim().toLowerCase();
+            const cells = row.querySelectorAll('td');
+
+            if (!label || cells.length < 2) return;
+
+            if (label.includes('initial monthly payment')) {
+              solar_initial_monthly = cells[1]?.innerText.trim();
+            }
+
+            if (label.includes('gross system price')) {
+              solar_gross_price = cells[0]?.innerText.trim();
+            }
+
+            if (label.includes('less: federal itc')) {
+              solar_federal_itc = cells[0]?.innerText.trim();
+            }
+
+            if (label.includes('savings on electric bills')) {
+              solar_25yr_savings = cells[0]?.innerText.trim();
+            }
+          });
+        });
+      }
+      // With-battery section data
+      const batterySection = document.querySelector('#collapse-section-v-0-54');
+      let battery_cost = '';
+      let battery_itc = '';
+      let battery_savings = '';
+      let battery_monthly = '';
+
+      if (batterySection) {
+        const tables = batterySection.querySelectorAll('table');
+
+        tables.forEach((table) => {
+          const rows = table.querySelectorAll('tbody tr');
+
+          rows.forEach((row) => {
+            const label = row.querySelector('th')?.innerText.trim().toLowerCase();
+            const cells = row.querySelectorAll('td');
+
+            if (!label || cells.length < 1) return;
+
+            if (label.includes('gross system cost with battery')) {
+              battery_cost = cells[0]?.innerText.trim();
+            }
+
+            if (label.includes('amount of federal itc')) {
+              battery_itc = cells[0]?.innerText.trim();
+            }
+
+            if (label.includes('25-year savings')) {
+              battery_savings = cells[0]?.innerText.trim();
+            }
+
+            if (label.includes('initial monthly payment')) {
+              battery_monthly = cells[0]?.innerText.trim();
+            }
+          });
+        });
+      }
+
 
       return {
-        solar_only_gross_system_price: getTextFromTable("#collapse-section-v-0-31", "gross system price", 0),
-        solar_only_initial_monthly_payment: getTextFromTable("#collapse-section-v-0-31", "initial monthly payment", 1),
-        solar_only_federal_ITC: getTextFromTable("#collapse-section-v-0-31", "federal itc", 0),
-        solar_only_25Year_savings: getTextFromTable("#collapse-section-v-0-31", "savings on electric bills", 0),
-
-        with_battery_gross_system_cost: getTextFromTable("#collapse-section-v-0-54", "gross system cost with battery", 0),
-        with_battery_initial_monthly_payment: getTextFromTable("#collapse-section-v-0-54", "initial monthly payment", 0),
-        with_battery_federal_ITC: getTextFromTable("#collapse-section-v-0-54", "federal itc", 0),
-        with_battery_25Year_savings: getTextFromTable("#collapse-section-v-0-54", "25-year savings", 0),
+        Intro_Greeting: greetingEl?.innerText.trim() || '',
+        distance_from_location: distanceEl?.innerText.trim() || '',
+        system_size: systemSize,
+        solar_only_25Year_savings: solar_25yr_savings,
+        solar_only_gross_system_price: solar_gross_price,
+        solar_only_federal_ITC: solar_federal_itc,
+        solar_only_initial_monthly_payment: solar_initial_monthly,
+        with_battery_gross_system_cost: battery_cost,
+        with_battery_25Year_savings: battery_savings,
+        with_battery_federal_ITC: battery_itc,
+        with_battery_initial_monthly_payment: battery_monthly
       };
     });
 
