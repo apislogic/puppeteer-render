@@ -1,7 +1,7 @@
 const puppeteer = require("puppeteer");
 require("dotenv").config();
 
-const scrapeLogic = async (res) => {
+const scrapeLogic = async (res, url) => {
   const browser = await puppeteer.launch({
     args: [
       "--disable-setuid-sandbox",
@@ -14,35 +14,57 @@ const scrapeLogic = async (res) => {
         ? process.env.PUPPETEER_EXECUTABLE_PATH
         : puppeteer.executablePath(),
   });
+
   try {
     const page = await browser.newPage();
+    await page.goto(url, { waitUntil: "networkidle2" });
 
-    await page.goto("https://developer.chrome.com/");
+    // Attempt to detect which solar-only section exists
+    const solarSelector =
+      (await page.$("#collapse-section-v-0-31")) ||
+      (await page.$("#collapse-section-v-0-21"));
 
-    // Set screen size
-    await page.setViewport({ width: 1080, height: 1024 });
+    const data = await page.evaluate((solarSelectorId) => {
+      const getTextFromTable = (sectionSelector, labelMatch, col = 0) => {
+        const section = document.querySelector(sectionSelector);
+        if (!section) return null;
 
-    // Type into search box
-    await page.type(".search-box__input", "automate beyond recorder");
+        const rows = section.querySelectorAll("table tbody tr");
+        for (const row of rows) {
+          const th = row.querySelector("th");
+          const tds = row.querySelectorAll("td");
+          if (!th || tds.length === 0) continue;
 
-    // Wait and click on first result
-    const searchResultSelector = ".search-box__link";
-    await page.waitForSelector(searchResultSelector);
-    await page.click(searchResultSelector);
+          const label = th.innerText.trim().toLowerCase();
+          if (label.includes(labelMatch.toLowerCase())) {
+            return tds[col]?.innerText.trim();
+          }
+        }
+        return null;
+      };
 
-    // Locate the full title with a unique string
-    const textSelector = await page.waitForSelector(
-      "text/Customize and automate"
-    );
-    const fullTitle = await textSelector.evaluate((el) => el.textContent);
+      const solarSection = document.querySelector("#collapse-section-v-0-31") ||
+                           document.querySelector("#collapse-section-v-0-21");
+      const batterySection = document.querySelector("#collapse-section-v-0-54");
 
-    // Print the full title
-    const logStatement = `The title of this blog post is ${fullTitle}`;
-    console.log(logStatement);
-    res.send(logStatement);
-  } catch (e) {
-    console.error(e);
-    res.send(`Something went wrong while running Puppeteer: ${e}`);
+      return {
+        solar_only_gross_system_price: getTextFromTable("#collapse-section-v-0-31", "gross system price", 0),
+        solar_only_initial_monthly_payment: getTextFromTable("#collapse-section-v-0-31", "initial monthly payment", 1),
+        solar_only_federal_ITC: getTextFromTable("#collapse-section-v-0-31", "federal itc", 0),
+        solar_only_25Year_savings: getTextFromTable("#collapse-section-v-0-31", "savings on electric bills", 0),
+
+        with_battery_gross_system_cost: getTextFromTable("#collapse-section-v-0-54", "gross system cost with battery", 0),
+        with_battery_initial_monthly_payment: getTextFromTable("#collapse-section-v-0-54", "initial monthly payment", 0),
+        with_battery_federal_ITC: getTextFromTable("#collapse-section-v-0-54", "federal itc", 0),
+        with_battery_25Year_savings: getTextFromTable("#collapse-section-v-0-54", "25-year savings", 0),
+      };
+    });
+
+    console.log(data);
+    res.json(data);
+  } catch (err) {
+    console.error("Scraping error:", err);
+    res.status(500).send(`Scraping error: ${err.message}`);
   } finally {
     await browser.close();
   }
