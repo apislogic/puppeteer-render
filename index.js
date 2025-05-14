@@ -1,6 +1,6 @@
 const express = require("express");
 const { scrapeLogic: esScraper } = require("./scrapeLogic");
-const { scrapeLogic: otherScraper } = require("./otherScraper");
+//const { scrapeLogic: otherScraper } = require("./otherScraper");
 const app = express();
 require("dotenv").config();
 const PORT = process.env.PORT || 4000;
@@ -26,9 +26,9 @@ app.post("/scrape", (req, res) => {
     return esScraper(res, url);
   }
 
-  if (scraper === "othersite") {
+  /*if (scraper === "othersite") {
     return otherScraper(res, url);
-  }
+  }*/
 
   return res.status(400).send(`Unknown scraper: ${scraper}`);
 });
